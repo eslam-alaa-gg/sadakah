@@ -1,0 +1,15 @@
+{
+  "audio": [
+    {
+      "id": "quran-ya-sin",
+      "type": "quran",
+      "title": "سُورَةُ يٰسٓ",
+      "shortTitle": "سورة يس",
+      "reader": "عمر بن ضياء الدين",
+      "info": "مكية · 83 آية · تلاوة كاملة خاشعة",
+      "src": "assets/audio/quran/surah/surah-ya-sin.mp3",
+      "format": "mp3",
+      "duration": "20:38"
+    }
+  ]
+}
