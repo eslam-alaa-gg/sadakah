@@ -5,9 +5,10 @@
  * - باقي الملفات: من التخزين فورًا مع تحديثها في الخلفية (stale-while-revalidate).
  * عند تغيير أي ملف ثابت ارفع رقم الإصدار في CACHE_NAME.
  */
-const CACHE_NAME = 'al-jallad-pwa-v2';
+const CACHE_NAME = 'al-jallad-pwa-v4';
 const CORE = ['./', './index.html', './manifest.webmanifest'];
 const OPTIONAL = [
+  './visitors-local.js',
   './data/hadith.json',
   './assets/audio/quran/metadata.json',
   './assets/icons/icon-192.png',
