@@ -484,6 +484,7 @@ badge.addEventListener("click",function(){toast(null!==state.count?"إجمالي
   function publicUrl(path){return url(path);}
   function renderPublic(){
     if(!rows.length)return; /* Keep original static gallery visible until first legacy import */
+    var filters=document.getElementById('mg-filter');if(filters)filters.hidden=true;
     grid.textContent='';
     rows.forEach(function(row){var b=node('button','mg-item');b.type='button';b.setAttribute('aria-label','عرض صورة من الذكريات');var im=document.createElement('img');im.loading='lazy';im.src=publicUrl(row.image_path);im.alt='ذكرى';b.appendChild(im);b.addEventListener('click',function(){var lb=document.getElementById('mlb'),li=document.getElementById('mlb-img'),cap=document.getElementById('mlb-cap');if(lb&&li&&cap){li.src=im.src;li.alt='ذكرى';cap.textContent='';lb.showModal();}});grid.appendChild(b);});
   }
@@ -498,7 +499,7 @@ badge.addEventListener("click",function(){toast(null!==state.count?"إجمالي
       var edit=node('button','v2-btn','تعديل الصورة');edit.type='button';edit.addEventListener('click',function(){editId=row.id;file.click();});
       var del=node('button','v2-btn mp-btn-danger','حذف');del.type='button';del.addEventListener('click',async function(){if(!confirm('هل تريد حذف هذه الصورة نهائيًا؟'))return;del.disabled=true;try{await admin();var d=await client.from('memories').delete().eq('id',row.id);if(d.error)throw d.error;var rm=await client.storage.from(bucket).remove([row.image_path]);if(rm.error)console.warn('تعذر حذف ملف الصورة القديم',rm.error);await load();msg('تم حذف الصورة.');}catch(e){msg(e.message||'تعذر الحذف.',true);del.disabled=false;}});actions.append(edit,del);card.appendChild(actions);list.appendChild(card);});
   }
-  $('memory-add').addEventListener('click',function(){editId=null;file.click();});
+  $('memory-add').addEventListener('click',function(){if(!rows.length&&document.querySelectorAll('.mem-grid .card img').length){msg('انقل الصور الحالية أولًا للحفاظ عليها قبل إضافة صور جديدة.');$('memory-migrate').focus();return;}editId=null;file.click();});
   $('memory-migrate').addEventListener('click',async function(){
     var btn=$('memory-migrate');btn.disabled=true;msg('جارٍ نقل الصور الحالية بأمان…');
     try{
