@@ -471,7 +471,7 @@ badge.addEventListener("click",function(){toast(null!==state.count?"إجمالي
   var grid=document.getElementById('mg-grid');
   if(!root||!grid||!window.supabase||!cfg.SUPABASE_URL||!cfg.SUPABASE_ANON_KEY)return;
   var client=window.supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY);
-  var bucket='memorial-images', max=5*1024*1024, rows=[], editId=null, chosen=null, previewUrl=null;
+  var bucket='memorial-images', max=5*1024*1024, rows=[], managedMode=false, editId=null, chosen=null, previewUrl=null;
   var $=function(id){return document.getElementById(id);};
   var status=$('memory-admin-status'), list=$('memory-admin-list'), file=$('memory-file');
   function msg(t,err){status.textContent=t||'';status.setAttribute('data-kind',err?'err':'ok');}
@@ -483,14 +483,21 @@ badge.addEventListener("click",function(){toast(null!==state.count?"إجمالي
   async function admin(){var u=await client.auth.getUser();if(!u.data||!u.data.user)throw new Error('سجّل دخول المدير أولًا.');var a=await client.rpc('is_admin');if(a.error||a.data!==true)throw new Error('الحساب الحالي غير مصرح له بإدارة الذكريات.');return true;}
   function publicUrl(path){return url(path);}
   function renderPublic(){
-    if(!rows.length)return; /* Keep original static gallery visible until first legacy import */
+    if(!managedMode)return; /* Keep the original static gallery until an admin starts managing it */
     var filters=document.getElementById('mg-filter');if(filters)filters.hidden=true;
     grid.textContent='';
+    if(!rows.length){grid.appendChild(node('p','v2-msg mg-empty','لا توجد صور في الذكريات حاليًا.'));return;}
     rows.forEach(function(row){var b=node('button','mg-item');b.type='button';b.setAttribute('aria-label','عرض صورة من الذكريات');var im=document.createElement('img');im.loading='lazy';im.src=publicUrl(row.image_path);im.alt='ذكرى';b.appendChild(im);b.addEventListener('click',function(){var lb=document.getElementById('mlb'),li=document.getElementById('mlb-img'),cap=document.getElementById('mlb-cap');if(lb&&li&&cap){li.src=im.src;li.alt='ذكرى';cap.textContent='';lb.showModal();}});grid.appendChild(b);});
   }
+  async function markManaged(){
+    var r=await client.from('memories_gallery_settings').upsert({id:true,initialized:true},{onConflict:'id'});
+    if(r.error)throw r.error;managedMode=true;
+  }
   async function load(){
+    var setting=await client.from('memories_gallery_settings').select('initialized').eq('id',true).maybeSingle();
+    if(setting.error)throw setting.error;
     var q=await client.from('memories').select('id,image_path,sort_order,created_at,updated_at').order('sort_order',{ascending:true}).order('created_at',{ascending:true});
-    if(q.error)throw q.error;rows=q.data||[];renderPublic();renderAdmin();
+    if(q.error)throw q.error;rows=q.data||[];managedMode=!!(setting.data&&setting.data.initialized)||rows.length>0;renderPublic();renderAdmin();
   }
   function renderAdmin(){
     list.textContent='';
@@ -521,7 +528,7 @@ badge.addEventListener("click",function(){toast(null!==state.count?"إجمالي
         if(ins.error){if(!up.error)await client.storage.from(bucket).remove([path]);throw ins.error;}
         added++;
       }
-      await load();msg('اكتمل نقل الصور. تمت إضافة '+added+' وتجاوز '+skipped+' صورة موجودة مسبقًا.');
+      await markManaged();await load();msg('اكتمل نقل الصور. تمت إضافة '+added+' وتجاوز '+skipped+' صورة موجودة مسبقًا.');
     }catch(e){msg(e.message||'تعذر نقل الصور.',true);}
     finally{btn.disabled=false;}
   });
@@ -535,7 +542,7 @@ badge.addEventListener("click",function(){toast(null!==state.count?"إجمالي
       var write=old?await client.from('memories').update({image_path:path,updated_at:new Date().toISOString()}).eq('id',old.id):await client.from('memories').insert({image_path:path,sort_order:rows.length});
       if(write.error){await client.storage.from(bucket).remove([path]);throw write.error;}
       if(old){var rm=await client.storage.from(bucket).remove([old.image_path]);if(rm.error)console.warn('تعذر حذف الصورة المستبدلة',rm.error);}
-      clearPreview();await load();msg(old?'تم استبدال الصورة دون إنشاء سجل مكرر.':'تمت إضافة الصورة بنجاح.');
+      await markManaged();clearPreview();await load();msg(old?'تم استبدال الصورة دون إنشاء سجل مكرر.':'تمت إضافة الصورة بنجاح.');
     }catch(e){msg(e.message||'تعذر حفظ الصورة.',true);}
     finally{btn.disabled=false;}
   });
