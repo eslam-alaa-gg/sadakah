@@ -5,7 +5,7 @@
  * - باقي الملفات: من التخزين فورًا مع تحديثها في الخلفية (stale-while-revalidate).
  * عند تغيير أي ملف ثابت ارفع رقم الإصدار في CACHE_NAME.
  */
-const CACHE_NAME = 'al-jallad-pwa-v4';
+const CACHE_NAME = 'al-jallad-pwa-v5';
 const CORE = ['./', './index.html', './manifest.webmanifest'];
 const OPTIONAL = [
   './visitors-local.js',
@@ -45,15 +45,19 @@ self.addEventListener('fetch', event => {
   if (request.headers.has('range') || /\.(mp3|m4a|ogg|wav)$/i.test(url.pathname)) return;
 
   if (request.mode === 'navigate') {
+    const isMemoriesAdmin = /\/admin\/memories\.html$/.test(url.pathname);
     event.respondWith((async () => {
       try {
         const response = await fetch(request);
-        if (response && response.ok) {
+        // The standalone admin page must never overwrite the offline homepage cache.
+        if (response && response.ok && !isMemoriesAdmin) {
           const cache = await caches.open(CACHE_NAME);
           cache.put('./index.html', response.clone());
         }
         return response;
       } catch (err) {
+        // Admin tools require a live Supabase connection; do not fall back to the homepage.
+        if (isMemoriesAdmin) return Response.error();
         return (await caches.match('./index.html')) || Response.error();
       }
     })());
