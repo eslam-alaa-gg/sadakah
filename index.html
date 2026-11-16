@@ -548,11 +548,9 @@ badge.addEventListener("click",function(){toast(null!==state.count?"إجمالي
     var data=setting.data||{};
     if(data.is_visible===false){section.hidden=true;return;}
     moveSection(data.display_position||'before-more');
-    if(data.initialized){
-      var q=await client.from('memories').select('id,image_path,sort_order,created_at').order('sort_order',{ascending:true}).order('created_at',{ascending:true});
-      if(q.error){console.warn('Memories gallery unavailable:',q.error);return;}
-      render(q.data||[]);
-    }
+    var q=await client.from('memories').select('id,image_path,sort_order,created_at').order('sort_order',{ascending:true}).order('created_at',{ascending:true});
+    if(q.error){console.warn('Memories gallery unavailable:',q.error);return;}
+    if(data.initialized||(q.data||[]).length)render(q.data||[]);
   }).catch(function(e){console.warn('Memories gallery unavailable:',e);});
   var tools=document.getElementById('memories-admin-tools');
   if(tools){
