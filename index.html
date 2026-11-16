@@ -352,7 +352,7 @@ badge.addEventListener("click",function(){toast(null!==state.count?"إجمالي
     if (!sb) return;
     showAdmStatus(null, 'جارٍ فتح نافذة تسجيل الدخول…');
     try {
-      await sb.auth.signInWithOAuth({ provider:'google', options:{ redirectTo: location.origin + location.pathname + '#admin' } });
+      await sb.auth.signInWithOAuth({ provider:'google', options:{ redirectTo: location.origin + location.pathname + '?admin=1' } });
     } catch(e) { showAdmStatus('err', 'تعذر بدء تسجيل الدخول: ' + (e && e.message ? e.message : '')); }
   });
 
@@ -445,7 +445,7 @@ badge.addEventListener("click",function(){toast(null!==state.count?"إجمالي
   }
 
   /* ===== الوصول المخفي للوحة: #admin في الرابط فقط ===== */
-  function checkHash(){ if (/#admin/.test(location.hash)) { openAdmin(); } }
+  function checkHash(){ if (new URLSearchParams(location.search).get('admin') === '1') { openAdmin(); } }
   window.addEventListener('hashchange', checkHash);
 
   /* ===== التهيئة ===== */
