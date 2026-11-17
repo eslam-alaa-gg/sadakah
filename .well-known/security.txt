@@ -1,0 +1,5 @@
+Contact: https://github.com/eslam-alaa-gg/sadakah/security/advisories/new
+Expires: 2027-11-17T00:00:00.000Z
+Preferred-Languages: ar, en
+Canonical: https://sadakah-58j1.vercel.app/.well-known/security.txt
+Policy: https://github.com/eslam-alaa-gg/sadakah/blob/main/SECURITY.md
