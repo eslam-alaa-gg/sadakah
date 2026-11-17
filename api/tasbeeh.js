@@ -2,8 +2,13 @@ const URL_ = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
 const TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 const KEY = 'sj:tasbeeh:total';
 
-// حد بسيط لكل IP لحماية العدّاد من التضخيم الآلي
-const RATE_LIMIT = 20;
+// حدود لكل IP لحماية العدّاد من التضخيم الآلي.
+// POST مرتفع نسبيًا حتى لا يتعطّل المستخدم أثناء التسبيح السريع،
+// وGET منفصل لأن الصفحة تُحدّث الإجمالي كل 12 ثانية.
+const LIMITS = {
+  'tasbeeh-post': 600,
+  'tasbeeh-get': 240,
+};
 const RATE_WINDOW_S = 60;
 
 async function redis(commands) {
@@ -45,12 +50,12 @@ function isSameOrigin(req) {
   }
 }
 
-async function isRateLimited(ip) {
-  const key = 'sj:rl:tasbeeh:' + ip;
+async function isRateLimited(ip, bucket, max) {
+  const key = 'sj:rl:' + bucket + ':' + ip;
   const [count] = await redis([['INCR', key]]);
   const n = Number(count) || 0;
   if (n === 1) await redis([['EXPIRE', key, String(RATE_WINDOW_S)]]);
-  return n > RATE_LIMIT;
+  return n > max;
 }
 
 module.exports = async function handler(req, res) {
@@ -66,7 +71,8 @@ module.exports = async function handler(req, res) {
   if (!isSameOrigin(req)) return send(res, 403, { ok: false, error: 'forbidden' });
   try {
     if (!URL_ || !TOKEN) return send(res, 500, { ok: false, error: 'database not connected' });
-    if (await isRateLimited(clientIp(req))) {
+    const bucket = req.method === 'POST' ? 'tasbeeh-post' : 'tasbeeh-get';
+    if (await isRateLimited(clientIp(req), bucket, LIMITS[bucket])) {
       res.setHeader('Retry-After', String(RATE_WINDOW_S));
       return send(res, 429, { ok: false, error: 'too many requests' });
     }

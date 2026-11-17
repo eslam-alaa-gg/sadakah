@@ -5,7 +5,7 @@ const ONLINE_MS = 60 * 1000;
 const VISIT_TTL = 30 * 60;
 
 // حد بسيط لكل IP لحماية العدّاد من الطلبات الآلية
-const RATE_LIMIT = 120;
+const RATE_LIMIT = 300;
 const RATE_WINDOW_S = 60;
 
 async function redis(commands) {
