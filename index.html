@@ -574,6 +574,12 @@ badge.addEventListener("click",function(){toast(null!==state.count?"إجمالي
     } catch(e) { showLogin(); showAdmStatus('err', 'تعذر التحقق من الجلسة: ' + (e && e.message ? e.message : '')); }
   }
 
+  var rejectedTab = document.createElement('button');
+  rejectedTab.type = 'button'; rejectedTab.setAttribute('role','tab'); rejectedTab.setAttribute('aria-selected','false'); rejectedTab.setAttribute('data-t','rejected');
+  rejectedTab.appendChild(document.createTextNode('مرفوضة '));
+  var rejectedCount = document.createElement('span'); rejectedCount.className = 'mp-admin-count'; rejectedCount.id = 'mp-cnt-r'; rejectedCount.textContent = '(0)';
+  rejectedTab.appendChild(rejectedCount);
+  admDlg.querySelector('.mp-admin-tabs').appendChild(rejectedTab);
   admDlg.querySelectorAll('.mp-admin-tabs button').forEach(function(b){
     b.addEventListener('click', function(){ admTab = b.getAttribute('data-t');
       admDlg.querySelectorAll('.mp-admin-tabs button').forEach(function(x){ x.setAttribute('aria-selected', String(x === b)); });
@@ -582,7 +588,7 @@ badge.addEventListener("click",function(){toast(null!==state.count?"إجمالي
   $('mp-refresh').addEventListener('click', function(){ loadAdmin(admTab); });
   $('mp-logout').addEventListener('click', async function(){ if (sb) await sb.auth.signOut(); admSession = null; admUid = null; showLogin(); showAdmStatus('ok','تم تسجيل الخروج.'); });
 
-  function adminCard(row, pendingMode){
+  function adminCard(row, tab){
     var card = el('article','mp-admin-card');
     var head = el('div','mp-post-head');
     head.appendChild(el('span','mp-post-name', (row.name && row.name.trim()) ? row.name.trim() : 'فاعل خير'));
@@ -595,55 +601,82 @@ badge.addEventListener("click",function(){toast(null!==state.count?"إجمالي
       im.addEventListener('click', function(){ openLb(im.src, (row.name && row.name.trim()) ? row.name.trim() : 'فاعل خير'); });
       card.appendChild(im);
     }
+    if (row.reviewed_at) card.appendChild(el('p','mp-post-date','آخر مراجعة: ' + fmtDate(row.reviewed_at)));
     var act = el('div','mp-admin-actions');
-    function btn(label, cls, fn){ var b = el('button','v2-btn ' + cls, label); b.type='button'; b.addEventListener('click', fn); act.appendChild(b); }
-    if (pendingMode) {
-      btn('قبول ونشر','', async function(){ b1.disabled = true;
-        var r = await sb.from('memorial_posts').update({ status:'approved', reviewed_at:new Date().toISOString() }).eq('id', row.id);
-        if (r.error) { showAdmStatus('err','تعذر القبول: ' + r.error.message); b1.disabled = false; return; }
-        toastMsg('تم نشر المشاركة'); loadAdmin(admTab); renderPosts(); });
-      var b1 = act.lastChild;
-      btn('رفض','mp-btn-danger', async function(){ b2.disabled = true;
-        var r = await sb.from('memorial_posts').update({ status:'rejected', reviewed_at:new Date().toISOString() }).eq('id', row.id);
-        if (r.error) { showAdmStatus('err','تعذر الرفض: ' + r.error.message); b2.disabled = false; return; }
-        toastMsg('تم رفض المشاركة (لن تُنشر)'); loadAdmin(admTab); });
-      var b2 = act.lastChild;
-      btn('حذف نهائي','mp-btn-danger', function(){ delPost(row); });
-    } else {
-      btn('حذف المشاركة والصورة','mp-btn-danger', function(){ delPost(row); });
+    function btn(label, cls, fn){ var b = el('button','v2-btn ' + cls, label); b.type='button'; b.addEventListener('click', fn); act.appendChild(b); return b; }
+    if (tab === 'pending') {
+      btn('قبول ونشر','', async function(b){
+        b.disabled = true;
+        var r = await sb.from('memorial_posts').update({ status:'approved', reviewed_at:new Date().toISOString(), reviewed_by:admUid }).eq('id', row.id);
+        if (r.error) { showAdmStatus('err','تعذر القبول: ' + r.error.message); b.disabled = false; return; }
+        toastMsg('تم نشر المشاركة'); loadAdmin(admTab); renderPosts();
+      });
+      btn('رفض','mp-btn-danger', async function(b){
+        b.disabled = true;
+        var r = await sb.from('memorial_posts').update({ status:'rejected', reviewed_at:new Date().toISOString(), reviewed_by:admUid }).eq('id', row.id);
+        if (r.error) { showAdmStatus('err','تعذر الرفض: ' + r.error.message); b.disabled = false; return; }
+        toastMsg('تم رفض المشاركة'); loadAdmin(admTab);
+      });
+    } else if (tab === 'rejected') {
+      btn('إعادة النشر','', async function(b){
+        b.disabled = true;
+        var r = await sb.from('memorial_posts').update({ status:'approved', reviewed_at:new Date().toISOString(), reviewed_by:admUid }).eq('id', row.id);
+        if (r.error) { showAdmStatus('err','تعذر إعادة النشر: ' + r.error.message); b.disabled = false; return; }
+        toastMsg('تمت إعادة نشر المشاركة'); loadAdmin(admTab); renderPosts();
+      });
+      btn('إعادتها للمراجعة','', async function(b){
+        b.disabled = true;
+        var r = await sb.from('memorial_posts').update({ status:'pending', reviewed_at:null, reviewed_by:null }).eq('id', row.id);
+        if (r.error) { showAdmStatus('err','تعذر إعادة المشاركة للمراجعة: ' + r.error.message); b.disabled = false; return; }
+        toastMsg('عادت المشاركة إلى قائمة المراجعة'); loadAdmin(admTab);
+      });
     }
+    btn('حذف المشاركة والصورة','mp-btn-danger', function(){ delPost(row); });
     card.appendChild(act);
     return card;
   }
 
   async function delPost(row){
-    if (!window.confirm('تأكيد الحذف النهائي لهذه المشاركة نهائيًا ولا يمكن التراجع.')) return;
+    if (!window.confirm('تأكيد الحذف النهائي لهذه المشاركة؟ لا يمكن التراجع عن حذف المشاركة.')) return;
     var r = await sb.from('memorial_posts').delete().eq('id', row.id);
     if (r.error) { showAdmStatus('err','تعذر الحذف: ' + r.error.message); return; }
-    if (row.image_path) { try { await sb.storage.from(BUCKET).remove([row.image_path]); } catch(e){} }
-    toastMsg('تم الحذف'); loadAdmin(admTab); renderPosts();
+    if (row.image_path) {
+      var imageResult = await sb.storage.from(BUCKET).remove([row.image_path]);
+      if (imageResult.error) {
+        showAdmStatus('err','حُذفت المشاركة، لكن تعذر حذف ملف الصورة من التخزين: ' + imageResult.error.message);
+        loadAdmin(admTab); renderPosts(); return;
+      }
+    }
+    toastMsg('تم حذف المشاركة والصورة'); loadAdmin(admTab); renderPosts();
   }
 
   async function loadAdmin(tab){
     if (!sb) return;
     admList.textContent = ''; showAdmStatus(null,'جارٍ التحميل…');
     try {
-      var st = tab === 'approved' ? 'approved' : 'pending';
-      var q = await sb.from('memorial_posts').select('*').eq('status', st).order('created_at',{ascending:false}).limit(100);
-      if (q.error) throw q.error;
-      var rows = q.data || [];
-      $('mp-cnt-p').textContent = '(' + (tab === 'pending' ? rows.length : '—') + ')';
-      $('mp-cnt-a').textContent = '(' + (tab === 'approved' ? rows.length : '—') + ')';
-      if (!rows.length) { admList.appendChild(el('p','mp-empty', tab === 'pending' ? 'لا توجد مشاركات تنتظر المراجعة.' : 'لا توجد مشاركات منشورة.')); }
-      rows.forEach(function(row){ admList.appendChild(adminCard(row, tab === 'pending')); });
+      var allowedTabs = ['pending','approved','rejected'];
+      if (allowedTabs.indexOf(tab) === -1) tab = 'pending';
+      var results = await Promise.all([
+        sb.from('memorial_posts').select('*').eq('status', tab).order('created_at',{ascending:false}).limit(100),
+        sb.from('memorial_posts').select('id',{count:'exact',head:true}).eq('status','pending'),
+        sb.from('memorial_posts').select('id',{count:'exact',head:true}).eq('status','approved'),
+        sb.from('memorial_posts').select('id',{count:'exact',head:true}).eq('status','rejected')
+      ]);
+      results.forEach(function(x){ if (x.error) throw x.error; });
+      var rows = results[0].data || [];
+      $('mp-cnt-p').textContent = '(' + (results[1].count == null ? '—' : results[1].count) + ')';
+      $('mp-cnt-a').textContent = '(' + (results[2].count == null ? '—' : results[2].count) + ')';
+      $('mp-cnt-r').textContent = '(' + (results[3].count == null ? '—' : results[3].count) + ')';
+      if (!rows.length) {
+        var emptyText = tab === 'pending' ? 'لا توجد مشاركات تنتظر المراجعة.' : tab === 'approved' ? 'لا توجد مشاركات منشورة.' : 'لا توجد مشاركات مرفوضة.';
+        admList.appendChild(el('p','mp-empty',emptyText));
+      }
+      rows.forEach(function(row){ admList.appendChild(adminCard(row, tab)); });
       showAdmStatus(null,'');
-      if (tab === 'pending') { var c = await sb.from('memorial_posts').select('id',{count:'exact',head:true}).eq('status','approved'); $('mp-cnt-a').textContent = '(' + (c.count != null ? c.count : '—') + ')'; }
-      else { var c2 = await sb.from('memorial_posts').select('id',{count:'exact',head:true}).eq('status','pending'); $('mp-cnt-p').textContent = '(' + (c2.count != null ? c2.count : '—') + ')'; }
     } catch(e) {
       showAdmStatus('err','تعذر تحميل المشاركات: ' + (e && e.message ? e.message : 'تحقق من صلاحيات الحساب.'));
     }
   }
-
   /* ===== الوصول المخفي للوحة: #admin في الرابط فقط ===== */
   function checkHash(){ if (new URLSearchParams(location.search).get('admin') === '1') { openAdmin(); } }
   window.addEventListener('hashchange', checkHash);
