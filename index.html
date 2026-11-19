@@ -753,13 +753,20 @@ badge.addEventListener("click",function(){toast(null!==state.count?"إجمالي
 })();
 </script>
 
-<script>
+<script id="shared-tasbeeh-realtime">
 (function(){
+  'use strict';
   var numberEl=document.getElementById('tasbeeh-total-number');
   var iconEl=document.getElementById('tasbeeh-total-icon');
   var tapEl=document.getElementById('tap');
   if(!numberEl||!tapEl)return;
+
   var total=0;
+  var realtimeChannel=null;
+  var refreshTimer=null;
+  var lastRefreshAt=0;
+  var CFG=window.MP_CONFIG||{};
+
   function showTotal(value,animate){
     var next=Number(value);
     if(!Number.isFinite(next)||next<0)return;
@@ -773,20 +780,68 @@ badge.addEventListener("click",function(){toast(null!==state.count?"إجمالي
       iconEl.classList.add('is-pulsing');
     }
   }
+
   function refreshTotal(){
     return fetch('/api/tasbeeh',{method:'GET',cache:'no-store'})
       .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
       .then(function(data){if(data&&data.ok)showTotal(data.total,false);})
       .catch(function(e){console.warn('تعذر تحديث إجمالي التسبيحات',e);});
   }
+
+  // رسائل Realtime تنبّه الأجهزة الأخرى، لكن الرقم يُؤخذ دائمًا من API الموثوق.
+  function scheduleRefresh(){
+    var now=Date.now();
+    if(now-lastRefreshAt<500)return;
+    if(refreshTimer)window.clearTimeout(refreshTimer);
+    refreshTimer=window.setTimeout(function(){
+      lastRefreshAt=Date.now();
+      refreshTimer=null;
+      refreshTotal();
+    },120);
+  }
+
   refreshTotal();
+
+  if(CFG.SUPABASE_URL&&CFG.SUPABASE_ANON_KEY&&window.supabase&&window.supabase.createClient){
+    try{
+      var liveClient=window.supabase.createClient(CFG.SUPABASE_URL,CFG.SUPABASE_ANON_KEY);
+      realtimeChannel=liveClient
+        .channel('sadakah-global-tasbeeh',{config:{broadcast:{self:false}}})
+        .on('broadcast',{event:'tasbeeh-updated'},scheduleRefresh)
+        .subscribe(function(status){
+          if(status==='SUBSCRIBED')refreshTotal();
+        });
+    }catch(e){
+      console.warn('تعذر تشغيل التحديث اللحظي لإجمالي التسبيحات',e);
+    }
+  }
+
   tapEl.addEventListener('click',function(){
     fetch('/api/tasbeeh',{method:'POST',cache:'no-store'})
       .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
-      .then(function(data){if(data&&data.ok)showTotal(data.total,true);})
-      .catch(function(e){console.warn('تعذر تسجيل التسبيحة في الإجمالي الجماعي',e);refreshTotal();});
+      .then(function(data){
+        if(!data||!data.ok)return;
+        showTotal(data.total,true);
+        if(realtimeChannel){
+          realtimeChannel.send({
+            type:'broadcast',
+            event:'tasbeeh-updated',
+            payload:{source:'shared-counter'}
+          }).catch(function(e){console.warn('تعذر إرسال تحديث التسبيح اللحظي',e);});
+        }
+      })
+      .catch(function(e){
+        console.warn('تعذر تسجيل التسبيحة في الإجمالي الجماعي',e);
+        refreshTotal();
+      });
   });
-  window.setInterval(refreshTotal,60000);
+
+  // مزامنة احتياطية عند عودة الاتصال أو فتح الصفحة، مع إبقاء Realtime هو التحديث الأساسي.
+  document.addEventListener('visibilitychange',function(){
+    if(!document.hidden)refreshTotal();
+  });
+  window.addEventListener('online',refreshTotal);
+  window.setInterval(refreshTotal,30000);
 })();
 </script>
 
