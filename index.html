@@ -277,6 +277,46 @@ badge.addEventListener("click",function(){toast(null!==state.count?"إجمالي
     return null;
   }
   function readMagic(file){ return new Promise(function(res){ var r = new FileReader(); r.onload = function(){ res(sniffType(new Uint8Array(r.result))); }; r.onerror = function(){ res(null); }; r.readAsArrayBuffer(file.slice(0, 16)); }); }
+  function optimizeImage(file){
+    if (!window.createImageBitmap || !document.createElement('canvas').toBlob) return Promise.resolve(file);
+    return createImageBitmap(file).then(function(bitmap){
+      var maxSide = 1600;
+      var scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+      var canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      var ctx = canvas.getContext('2d');
+      if (!ctx) { bitmap.close(); return file; }
+      ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      return new Promise(function(resolve){
+        canvas.toBlob(function(blob){
+          bitmap.close();
+          if (!blob || blob.size >= file.size) { resolve(file); return; }
+          var base = file.name.replace(/\\.[^.]+$/, '') || 'image';
+          resolve(new File([blob], base + '.webp', { type:'image/webp', lastModified:Date.now() }));
+        }, 'image/webp', 0.82);
+      });
+    }).catch(function(){ return file; });
+  }
+  function sendSubmission(fd, onProgress){
+    return new Promise(function(resolve, reject){
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', CFG.SUBMIT_ENDPOINT || (CFG.SUPABASE_URL + '/functions/v1/submit-post'));
+      xhr.setRequestHeader('apikey', CFG.SUPABASE_ANON_KEY);
+      xhr.timeout = 90000;
+      xhr.upload.addEventListener('progress', function(ev){
+        if (ev.lengthComputable && onProgress) onProgress(ev.loaded, ev.total);
+      });
+      xhr.addEventListener('load', function(){
+        var data = null;
+        try { data = JSON.parse(xhr.responseText); } catch(e){}
+        resolve({ ok:xhr.status >= 200 && xhr.status < 300, status:xhr.status, json:data });
+      });
+      xhr.addEventListener('error', function(){ reject(new Error('network error')); });
+      xhr.addEventListener('timeout', function(){ reject(new Error('upload timeout')); });
+      xhr.send(fd);
+    });
+  }
   function fp(){ var v = null; try { v = localStorage.getItem('mp_fp'); if (!v) { v = 'fp-' + Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem('mp_fp', v); } } catch(e){ v = 'fp-x'; } return v; }
 
   /* ===== نافذة تكبير الصورة ===== */
@@ -318,9 +358,13 @@ badge.addEventListener("click",function(){toast(null!==state.count?"إجمالي
     var mt = await readMagic(f);
     if (!mt) { clearFile(); setMsg(status, 'err', 'الملف المختار ليس صورة صالحة (JPG أو PNG أو WebP فقط).'); return; }
     if (f.type && f.type !== 'image/svg+xml' && mt !== 'image/jpeg' && mt !== 'image/png' && mt !== 'image/webp') { clearFile(); setMsg(status,'err','نوع الملف غير مسموح.'); return; }
-    clearFile(); curFile = f; curURL = URL.createObjectURL(f);
-    prevImg.src = curURL; prevName.textContent = f.name; prevMeta.textContent = (mt.split('/')[1].toUpperCase()) + ' · ' + (f.size/1024).toFixed(0) + ' KB';
+    setMsg(status, null, 'جارٍ تجهيز الصورة لتقليل وقت الرفع…');
+    var optimized = await optimizeImage(f);
+    clearFile(); curFile = optimized; curURL = URL.createObjectURL(optimized);
+    prevImg.src = curURL; prevName.textContent = optimized.name;
+    prevMeta.textContent = (optimized.type.split('/')[1] || mt.split('/')[1]).toUpperCase() + ' · ' + (optimized.size/1024).toFixed(0) + ' KB' + (optimized.size < f.size ? ' · تم تقليل الحجم' : '');
     prev.hidden = false; $('mp-file-empty').hidden = true;
+    setMsg(status, null, '');
   });
 
   function openDlg(){ openedAt = Date.now(); setMsg(status, null, ''); dlg.showModal(); if (!CFG_OK) setMsg(status, 'err', 'خدمة المشاركات غير مُهيأة بعد على الخادم (ملف mp-config.js فارغ). راجع دليل الإعداد المرفق مع المشروع.'); }
@@ -363,8 +407,12 @@ badge.addEventListener("click",function(){toast(null!==state.count?"إجمالي
       fd.append('elapsed', String(Date.now() - openedAt));
       fd.append('fp', fp());
       if (curFile) fd.append('image', curFile, curFile.name);
-      var r = await fetch(CFG.SUBMIT_ENDPOINT || (CFG.SUPABASE_URL + '/functions/v1/submit-post'), { method:'POST', headers:{ apikey: CFG.SUPABASE_ANON_KEY }, body: fd });
-      var j = null; try { j = await r.json(); } catch(e){}
+      var result = await sendSubmission(fd, function(loaded, total){
+        var pct = Math.round((loaded / total) * 100);
+        setMsg(status, null, curFile ? 'جارٍ رفع الصورة… ' + pct + '%' : 'جارٍ إرسال المشاركة…');
+      });
+      var r = { ok:result.ok, status:result.status };
+      var j = result.json;
       if (r.ok && j && j.ok) {
         try { localStorage.setItem('mp_last', String(Date.now())); } catch(e){}
         setMsg(status, 'ok', 'تم استلام مشاركتك بحمد الله. لن تظهر للزوار إلا بعد مراجعتها والموافقة عليها — جزاك الله خيرًا.');
