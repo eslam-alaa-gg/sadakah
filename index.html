@@ -678,4 +678,26 @@ badge.addEventListener("click",function(){toast(null!==state.count?"إجمالي
   window.setInterval(refreshTotal,12000);
 })();
 </script>
+
+<script id="tasbeeh-icon-animation-delegation">
+(function(){
+  var panel = document.getElementById('p-ms');
+  if (!panel) return;
+  panel.addEventListener('pointerdown', function(event){
+    var button = event.target && event.target.closest ? event.target.closest('.tasbeeh-action') : null;
+    if (!button || !panel.contains(button)) return;
+    button.classList.remove('is-animating');
+    void button.offsetWidth;
+    button.classList.add('is-animating');
+    var icon = button.querySelector('svg');
+    if (icon) {
+      icon.addEventListener('animationend', function done(){
+        button.classList.remove('is-animating');
+        icon.removeEventListener('animationend', done);
+      }, {once:true});
+    }
+    window.setTimeout(function(){ button.classList.remove('is-animating'); }, 650);
+  }, {passive:true});
+})();
+</script>
 </body></html>
