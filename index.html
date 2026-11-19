@@ -605,27 +605,27 @@ badge.addEventListener("click",function(){toast(null!==state.count?"إجمالي
     var act = el('div','mp-admin-actions');
     function btn(label, cls, fn){ var b = el('button','v2-btn ' + cls, label); b.type='button'; b.addEventListener('click', fn); act.appendChild(b); return b; }
     if (tab === 'pending') {
-      btn('قبول ونشر','', async function(b){
-        b.disabled = true;
+      btn('قبول ونشر','', async function(ev){
+        var b = ev.currentTarget; b.disabled = true;
         var r = await sb.from('memorial_posts').update({ status:'approved', reviewed_at:new Date().toISOString(), reviewed_by:admUid }).eq('id', row.id);
         if (r.error) { showAdmStatus('err','تعذر القبول: ' + r.error.message); b.disabled = false; return; }
         toastMsg('تم نشر المشاركة'); loadAdmin(admTab); renderPosts();
       });
-      btn('رفض','mp-btn-danger', async function(b){
-        b.disabled = true;
+      btn('رفض','mp-btn-danger', async function(ev){
+        var b = ev.currentTarget; b.disabled = true;
         var r = await sb.from('memorial_posts').update({ status:'rejected', reviewed_at:new Date().toISOString(), reviewed_by:admUid }).eq('id', row.id);
         if (r.error) { showAdmStatus('err','تعذر الرفض: ' + r.error.message); b.disabled = false; return; }
         toastMsg('تم رفض المشاركة'); loadAdmin(admTab);
       });
     } else if (tab === 'rejected') {
-      btn('إعادة النشر','', async function(b){
-        b.disabled = true;
+      btn('إعادة النشر','', async function(ev){
+        var b = ev.currentTarget; b.disabled = true;
         var r = await sb.from('memorial_posts').update({ status:'approved', reviewed_at:new Date().toISOString(), reviewed_by:admUid }).eq('id', row.id);
         if (r.error) { showAdmStatus('err','تعذر إعادة النشر: ' + r.error.message); b.disabled = false; return; }
         toastMsg('تمت إعادة نشر المشاركة'); loadAdmin(admTab); renderPosts();
       });
-      btn('إعادتها للمراجعة','', async function(b){
-        b.disabled = true;
+      btn('إعادتها للمراجعة','', async function(ev){
+        var b = ev.currentTarget; b.disabled = true;
         var r = await sb.from('memorial_posts').update({ status:'pending', reviewed_at:null, reviewed_by:null }).eq('id', row.id);
         if (r.error) { showAdmStatus('err','تعذر إعادة المشاركة للمراجعة: ' + r.error.message); b.disabled = false; return; }
         toastMsg('عادت المشاركة إلى قائمة المراجعة'); loadAdmin(admTab);
