@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://sadakah-58j1.vercel.app/sitemap.xml

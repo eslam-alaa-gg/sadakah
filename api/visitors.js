@@ -57,12 +57,12 @@ async function isRateLimited(ip) {
 
 module.exports = async function handler(req, res) {
   if (req.method === 'OPTIONS') {
-    res.setHeader('Allow', 'GET, OPTIONS');
+    res.setHeader('Allow', 'GET, POST, OPTIONS');
     res.statusCode = 204;
     return res.end();
   }
-  if (req.method !== 'GET') {
-    res.setHeader('Allow', 'GET, OPTIONS');
+  if (req.method !== 'GET' && req.method !== 'POST') {
+    res.setHeader('Allow', 'GET, POST, OPTIONS');
     return send(res, 405, { error: 'method not allowed' });
   }
   if (!isSameOrigin(req)) return send(res, 403, { error: 'forbidden' });
@@ -70,6 +70,10 @@ module.exports = async function handler(req, res) {
     const q = new URL(req.url, 'http://x').searchParams;
     const action = q.get('action');
     const vid = q.get('vid') || '';
+    if (req.method === 'POST' && action !== 'leave') {
+      res.setHeader('Allow', 'GET, POST, OPTIONS');
+      return send(res, 405, { error: 'method not allowed' });
+    }
     if (!['hit', 'ping', 'leave'].includes(action) || !VID_OK.test(vid)) {
       return send(res, 400, { error: 'bad request' });
     }
