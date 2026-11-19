@@ -283,7 +283,7 @@ html{scroll-padding-top:calc(14px + env(safe-area-inset-top,0px))}
 <dialog id=mp-lb aria-label="تكبير صورة المشاركة"><button class=btn-close id=mp-lb-close type=button aria-label=إغلاق>×</button><div class=lb-box><img id=mp-lb-img alt=""><div class=mp-lb-cap id=mp-lb-cap></div></div></dialog>
 <script>!function(){var t=document.getElementById("theme-toggle"),e=document.getElementById("sun-icon"),n=document.getElementById("moon-icon"),a=document.getElementById("theme-label");function o(t){"light"===t?(e.style.display="none",n.style.display="block",a.textContent="الليلي"):(e.style.display="block",n.style.display="none",a.textContent="النهاري")}o(document.documentElement.getAttribute("data-theme")||"dark"),t.addEventListener("click",function(){var t="dark"===(document.documentElement.getAttribute("data-theme")||"dark")?"light":"dark";document.documentElement.setAttribute("data-theme",t);try{localStorage.setItem("al_jallad_theme",t)}catch(t){}o(t);var e=document.createElement("div");e.className="toast",e.textContent="light"==t?"تم التبديل إلى الوضع النهاري ☀️":"تم التبديل إلى الوضع الليلي 🌙",document.body.appendChild(e),setTimeout(function(){e.remove()},1800)})}(),function(){
 var cnt=document.getElementById("visitor-count"),badge=document.getElementById("visitor-badge"),onWrap=document.getElementById("visitor-online"),onNum=document.getElementById("online-count"),lbl=badge.querySelector(".v-glass-label"),
-API=((document.querySelector("meta[name=visitors-api]")||{}).content||"/api/visitors"),BEAT=25000,ID_OK=/^[A-Za-z0-9_-]{8,64}$/,state={count:null,online:null},firstPaint=!0;
+API=((document.querySelector("meta[name=visitors-api]")||{}).content||"/api/visitors"),BEAT=60000,ID_OK=/^[A-Za-z0-9_-]{8,64}$/,state={count:null,online:null},firstPaint=!0;
 function toast(t){var e=document.createElement("div");e.className="toast",e.textContent=t,document.body.appendChild(e),setTimeout(function(){e.remove()},2200)}
 function fmt(t){return Number(t).toLocaleString("en-US")}
 function rnd(p){var a="";try{var u=new Uint8Array(12);crypto.getRandomValues(u);for(var i=0;i<u.length;i++)a+=("0"+u[i].toString(16)).slice(-2)}catch(e){a=Math.random().toString(36).slice(2)+Date.now().toString(36)}return p+a}
@@ -786,7 +786,7 @@ badge.addEventListener("click",function(){toast(null!==state.count?"إجمالي
       .then(function(data){if(data&&data.ok)showTotal(data.total,true);})
       .catch(function(e){console.warn('تعذر تسجيل التسبيحة في الإجمالي الجماعي',e);refreshTotal();});
   });
-  window.setInterval(refreshTotal,12000);
+  window.setInterval(refreshTotal,60000);
 })();
 </script>
 
