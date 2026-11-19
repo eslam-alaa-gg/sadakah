@@ -317,12 +317,23 @@ badge.addEventListener("click",function(){toast(null!==state.count?"إجمالي
     });
     setActive(active);
   }
-  var scrollFrame=0;
+  var scrollFrame=0,navigationTimer=0,navigating=false;
+  function finishNavigation(){
+    clearTimeout(navigationTimer);
+    navigationTimer=window.setTimeout(function(){
+      navigating=false;
+      updateActiveFromScroll();
+    },320);
+  }
   window.addEventListener("scroll",function(){
+    if(navigating){
+      finishNavigation();
+      return;
+    }
     if(scrollFrame)return;
     scrollFrame=window.requestAnimationFrame(function(){
       scrollFrame=0;
-      updateActiveFromScroll();
+      if(!navigating)updateActiveFromScroll();
     });
   },{passive:true});
   links.forEach(function(link){
@@ -330,8 +341,10 @@ badge.addEventListener("click",function(){toast(null!==state.count?"إجمالي
       var id=link.dataset.s,target=document.getElementById(id);
       if(!target)return;
       event.preventDefault();
+      navigating=true;
       setActive(sectionMap[id]||id);
       target.scrollIntoView({behavior:"smooth",block:"start"});
+      finishNavigation();
     });
   });
   var hash=window.location.hash.slice(1);
