@@ -5,7 +5,7 @@
  * - باقي الملفات: من التخزين فورًا مع تحديثها في الخلفية (stale-while-revalidate).
  * عند تغيير أي ملف ثابت ارفع رقم الإصدار في CACHE_NAME.
  */
-const CACHE_NAME = 'al-jallad-pwa-v4';
+const CACHE_NAME = 'al-jallad-pwa-v7';
 const CORE = ['./', './index.html', './manifest.webmanifest'];
 const OPTIONAL = [
   './visitors-local.js',
@@ -46,16 +46,20 @@ self.addEventListener('fetch', event => {
 
   if (request.mode === 'navigate') {
     event.respondWith((async () => {
-      try {
-        const response = await fetch(request);
+      const cached = await caches.match('./index.html');
+      const network = fetch(request).then(async response => {
         if (response && response.ok) {
           const cache = await caches.open(CACHE_NAME);
-          cache.put('./index.html', response.clone());
+          await cache.put('./index.html', response.clone());
         }
         return response;
-      } catch (err) {
-        return (await caches.match('./index.html')) || Response.error();
+      });
+      if (cached) {
+        network.catch(() => {});
+        return cached;
       }
+      try { return await network; }
+      catch (err) { return Response.error(); }
     })());
     return;
   }
