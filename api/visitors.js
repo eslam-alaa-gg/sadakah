@@ -1,7 +1,7 @@
 const URL_ = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
 const TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 const VID_OK = /^[A-Za-z0-9_-]{8,64}$/;
-const ONLINE_MS = 60 * 1000;
+const ONLINE_MS = 90 * 1000;
 const VISIT_TTL = 30 * 60;
 
 // حد بسيط لكل IP لحماية العدّاد من الطلبات الآلية
