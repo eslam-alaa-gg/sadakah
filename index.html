@@ -627,16 +627,46 @@ badge.addEventListener("click",function(){toast(null!==state.count?"إجمالي
     else { var ta = document.createElement('textarea'); ta.value = t; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); toastMsg('تم نسخ المعرّف'); } catch(e){} ta.remove(); }
   });
 
+  var admResolveToken = 0;
   async function resolveAdmin(){
+    var token = ++admResolveToken;
     try {
-      var u = await sb.auth.getUser();
-      admSession = u && u.data && u.data.user ? u.data.user : null;
+      showAdmStatus(null, 'جارٍ التحقق من تسجيل الدخول والصلاحيات…');
+      var sessionResult = await sb.auth.getSession();
+      if (token !== admResolveToken) return;
+      if (sessionResult && sessionResult.error) throw sessionResult.error;
+      var session = sessionResult && sessionResult.data ? sessionResult.data.session : null;
+      admSession = session && session.user ? session.user : null;
       admUid = admSession ? admSession.id : null;
-      if (!admSession) { showLogin(); return; }
+      if (!admSession) {
+        showLogin();
+        showAdmStatus(null, 'لم يتم العثور على جلسة دخول. سجّل الدخول بحساب Google المصرّح له.');
+        return;
+      }
       var r = await sb.rpc('is_admin');
+      if (token !== admResolveToken) return;
+      if (r && r.error) {
+        showLogin();
+        showAdmStatus('err', 'تم تسجيل الدخول، لكن تعذر التحقق من صلاحية المدير: ' + (r.error.message || 'خطأ في الاتصال بقاعدة البيانات.'));
+        return;
+      }
       if (r && r.data === true) { showPanel(); }
       else { showBoot(); }
-    } catch(e) { showLogin(); showAdmStatus('err', 'تعذر التحقق من الجلسة: ' + (e && e.message ? e.message : '')); }
+    } catch(e) {
+      if (token !== admResolveToken) return;
+      showLogin();
+      showAdmStatus('err', 'تعذر التحقق من جلسة الدخول: ' + (e && e.message ? e.message : 'خطأ غير معروف.'));
+    }
+  }
+
+  if (sb && sb.auth && typeof sb.auth.onAuthStateChange === 'function') {
+    sb.auth.onAuthStateChange(function(event, session){
+      if (event !== 'SIGNED_IN' && event !== 'TOKEN_REFRESHED' && event !== 'INITIAL_SESSION') return;
+      if (new URLSearchParams(location.search).get('admin') !== '1' && !admDlg.open) return;
+      window.setTimeout(function(){
+        if (admDlg.open || new URLSearchParams(location.search).get('admin') === '1') resolveAdmin();
+      }, 0);
+    });
   }
 
   var rejectedTab = document.createElement('button');
