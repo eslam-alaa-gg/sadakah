@@ -21,7 +21,7 @@
 //   RATE_MAX      : الحد الأقصى داخل النافذة (اختياري، الافتراضي 3).
 // ============================================================================
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.119.1';
 
 const MAX_FILE = 5 * 1024 * 1024; // 5MB
 const MAX_NAME = 40;
