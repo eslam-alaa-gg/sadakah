@@ -5,7 +5,7 @@
  * - باقي الملفات: من التخزين فورًا مع تحديثها في الخلفية (stale-while-revalidate).
  * عند تغيير أي ملف ثابت ارفع رقم الإصدار في CACHE_NAME.
  */
-const CACHE_NAME = 'al-jallad-pwa-v26';
+const CACHE_NAME = 'al-jallad-pwa-v27';
 const CORE = ['./', './index.html', './manifest.webmanifest'];
 const OPTIONAL = [
   './visitors-local.js',
@@ -46,20 +46,36 @@ self.addEventListener('fetch', event => {
 
   if (request.mode === 'navigate') {
     event.respondWith((async () => {
-      const cached = await caches.match('./index.html');
-      const network = fetch(request).then(async response => {
-        if (response && response.ok) {
-          const cache = await caches.open(CACHE_NAME);
-          await cache.put('./index.html', response.clone());
-        }
-        return response;
-      });
-      if (cached) {
-        network.catch(() => {});
-        return cached;
+      // Always fetch the real HTML entry point; never treat XML or another
+      // successful response as the cached homepage.
+      const indexUrl = new URL('./index.html', self.location.href).href;
+      const cache = await caches.open(CACHE_NAME);
+      let cached = await cache.match(indexUrl);
+
+      if (cached && !(cached.headers.get('content-type') || '').toLowerCase().includes('text/html')) {
+        await cache.delete(indexUrl);
+        cached = null;
       }
-      try { return await network; }
-      catch (err) { return Response.error(); }
+
+      try {
+        const response = await fetch(new Request(indexUrl, {
+          method: 'GET',
+          credentials: 'same-origin',
+          cache: 'no-store'
+        }));
+        const contentType = (response.headers.get('content-type') || '').toLowerCase();
+
+        if (response.ok && contentType.includes('text/html')) {
+          await cache.put(indexUrl, response.clone());
+          return response;
+        }
+
+        if (cached) return cached;
+        return Response.error();
+      } catch (err) {
+        if (cached) return cached;
+        return Response.error();
+      }
     })());
     return;
   }
