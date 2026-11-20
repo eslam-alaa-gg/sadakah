@@ -606,10 +606,12 @@ badge.addEventListener("click",function(){toast(null!==state.count?"إجمالي
   function showBoot(){ admLogin.hidden = false; admPanel.hidden = true; $('mp-admin-boot').hidden = false; $('mp-admin-uid').textContent = admUid || ''; }
   function showPanel(){ admLogin.hidden = true; admPanel.hidden = false; loadAdmin(admTab); }
 
-  function openAdmin(){ admDlg.showModal();
+  function openAdmin(){
+    if (!admDlg.open) admDlg.showModal();
     if (!CFG_OK || !sb) { showLogin(); $('mp-google').disabled = true; showAdmStatus('err', 'خدمة المشاركات غير مُهيأة بعد (mp-config.js فارغ). راجع دليل الإعداد.'); return; }
-    $('mp-google').disabled = false; showAdmStatus(null,'');
-    resolveAdmin(); }
+    $('mp-google').disabled = false;
+    resolveAdmin();
+  }
   $('mp-admin-close').addEventListener('click', function(){ admDlg.close(); });
   admDlg.addEventListener('click', function(ev){ if (ev.target === admDlg) admDlg.close(); });
 
@@ -627,52 +629,54 @@ badge.addEventListener("click",function(){toast(null!==state.count?"إجمالي
     else { var ta = document.createElement('textarea'); ta.value = t; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); toastMsg('تم نسخ المعرّف'); } catch(e){} ta.remove(); }
   });
 
-  var admResolveToken = 0;
+  var admResolvePromise = null;
   async function resolveAdmin(){
-    var token = ++admResolveToken;
-    try {
-      showAdmStatus(null, 'جارٍ التحقق من تسجيل الدخول والصلاحيات…');
-      var sessionResult = await sb.auth.getSession();
-      if (token !== admResolveToken) return;
-      if (sessionResult && sessionResult.error) throw sessionResult.error;
-      var session = sessionResult && sessionResult.data ? sessionResult.data.session : null;
-      admSession = session && session.user ? session.user : null;
-      admUid = admSession ? admSession.id : null;
-      if (!admSession) {
-        showLogin();
-        showAdmStatus(null, 'لم يتم العثور على جلسة دخول. سجّل الدخول بحساب Google المصرّح له.');
-        return;
-      }
-      // تحقق أولًا من الدالة، ثم استخدم قراءة سجل المدير نفسه كمسار تحقق احتياطي.
-      // هذا يمنع بقاء لوحة التحكم مخفية إذا تعذر استدعاء RPC أو عاد بقيمة غير متوقعة.
-      var r = await sb.rpc('is_admin');
-      if (token !== admResolveToken) return;
-      var isAdmin = !!(r && (r.data === true || r.data === 'true'));
-      var verifyError = r && r.error ? r.error : null;
-
-      if (!isAdmin) {
-        var ownAdmin = await sb.from('admins').select('user_id').eq('user_id', admUid).maybeSingle();
-        if (token !== admResolveToken) return;
-        if (ownAdmin && ownAdmin.error) {
+    if (admResolvePromise) return admResolvePromise;
+    admResolvePromise = (async function(){
+      try {
+        showAdmStatus(null, 'جارٍ التحقق من تسجيل الدخول والصلاحيات…');
+        var sessionResult = await sb.auth.getSession();
+        if (sessionResult && sessionResult.error) throw sessionResult.error;
+        var session = sessionResult && sessionResult.data ? sessionResult.data.session : null;
+        admSession = session && session.user ? session.user : null;
+        admUid = admSession ? admSession.id : null;
+        if (!admSession) {
           showLogin();
-          showAdmStatus('err', 'تم تسجيل الدخول، لكن تعذر قراءة صلاحيات المدير: ' + ownAdmin.error.message);
+          showAdmStatus(null, 'لم يتم العثور على جلسة دخول. سجّل الدخول بحساب Google المصرّح له.');
           return;
         }
-        isAdmin = !!(ownAdmin && ownAdmin.data && ownAdmin.data.user_id === admUid);
-      }
 
-      if (isAdmin) {
-        showPanel();
-        showAdmStatus(null, 'تم التحقق من صلاحية المدير. يمكنك مراجعة المشاركات وإدارتها.');
-      } else {
-        showBoot();
-        if (verifyError) showAdmStatus('err', 'تم تسجيل الدخول، لكن فحص صلاحية المدير لم يكتمل: ' + verifyError.message);
+        // المسار الأساسي: قراءة سجل الحساب نفسه وفق سياسة RLS المقيّدة بـ auth.uid().
+        // ثم RPC كمسار احتياطي، مع منع تشغيل عمليات تحقق متزامنة.
+        var ownAdmin = await sb.from('admins').select('user_id').eq('user_id', admUid).maybeSingle();
+        var isAdmin = !!(ownAdmin && ownAdmin.data && ownAdmin.data.user_id === admUid);
+        var ownError = ownAdmin && ownAdmin.error ? ownAdmin.error : null;
+
+        if (!isAdmin) {
+          var rpcResult = await sb.rpc('is_admin');
+          isAdmin = !!(rpcResult && (rpcResult.data === true || rpcResult.data === 'true'));
+          if (!isAdmin && ownError && rpcResult && rpcResult.error) {
+            showLogin();
+            showAdmStatus('err', 'تم تسجيل الدخول، لكن تعذر التحقق من صلاحية المدير. قراءة الحساب: ' + ownError.message + ' — فحص الصلاحية: ' + rpcResult.error.message);
+            return;
+          }
+        }
+
+        if (isAdmin) {
+          showPanel();
+          showAdmStatus(null, 'تم التحقق من صلاحية المدير. يمكنك مراجعة المشاركات وإدارتها.');
+        } else {
+          showBoot();
+          showAdmStatus(null, 'الحساب مسجل الدخول لكنه غير موجود ضمن المديرين. معرّف الحساب: ' + admUid);
+        }
+      } catch(e) {
+        showLogin();
+        showAdmStatus('err', 'تعذر التحقق من جلسة الدخول: ' + (e && e.message ? e.message : 'خطأ غير معروف.'));
+      } finally {
+        admResolvePromise = null;
       }
-    } catch(e) {
-      if (token !== admResolveToken) return;
-      showLogin();
-      showAdmStatus('err', 'تعذر التحقق من جلسة الدخول: ' + (e && e.message ? e.message : 'خطأ غير معروف.'));
-    }
+    })();
+    return admResolvePromise;
   }
 
   if (sb && sb.auth && typeof sb.auth.onAuthStateChange === 'function') {
@@ -699,6 +703,27 @@ badge.addEventListener("click",function(){toast(null!==state.count?"إجمالي
   $('mp-refresh').addEventListener('click', function(){ loadAdmin(admTab); });
   $('mp-logout').addEventListener('click', async function(){ if (sb) await sb.auth.signOut(); admSession = null; admUid = null; showLogin(); showAdmStatus('ok','تم تسجيل الخروج.'); });
 
+  async function updatePostStatus(row, changes, successMessage, refreshPublic, button){
+    if (button) button.disabled = true;
+    try {
+      var result = await sb.from('memorial_posts')
+        .update(changes)
+        .eq('id', row.id)
+        .select('id,status')
+        .maybeSingle();
+      if (result.error) throw result.error;
+      if (!result.data || result.data.id !== row.id || result.data.status !== changes.status) {
+        throw new Error('لم تؤكد قاعدة البيانات تغيير حالة المشاركة. تحقق من صلاحيات المدير ثم أعد المحاولة.');
+      }
+      toastMsg(successMessage);
+      await loadAdmin(admTab);
+      if (refreshPublic) await renderPosts();
+    } catch(e) {
+      showAdmStatus('err', 'تعذر تحديث المشاركة: ' + (e && e.message ? e.message : 'خطأ غير معروف.'));
+      if (button) button.disabled = false;
+    }
+  }
+
   function adminCard(row, tab){
     var card = el('article','mp-admin-card');
     var head = el('div','mp-post-head');
@@ -716,30 +741,18 @@ badge.addEventListener("click",function(){toast(null!==state.count?"إجمالي
     var act = el('div','mp-admin-actions');
     function btn(label, cls, fn){ var b = el('button','v2-btn ' + cls, label); b.type='button'; b.addEventListener('click', fn); act.appendChild(b); return b; }
     if (tab === 'pending') {
-      btn('قبول ونشر','', async function(ev){
-        var b = ev.currentTarget; b.disabled = true;
-        var r = await sb.from('memorial_posts').update({ status:'approved', reviewed_at:new Date().toISOString(), reviewed_by:admUid }).eq('id', row.id);
-        if (r.error) { showAdmStatus('err','تعذر القبول: ' + r.error.message); b.disabled = false; return; }
-        toastMsg('تم نشر المشاركة'); loadAdmin(admTab); renderPosts();
+      btn('قبول ونشر','', function(ev){
+        updatePostStatus(row, { status:'approved', reviewed_at:new Date().toISOString(), reviewed_by:admUid }, 'تم نشر المشاركة', true, ev.currentTarget);
       });
-      btn('رفض','mp-btn-danger', async function(ev){
-        var b = ev.currentTarget; b.disabled = true;
-        var r = await sb.from('memorial_posts').update({ status:'rejected', reviewed_at:new Date().toISOString(), reviewed_by:admUid }).eq('id', row.id);
-        if (r.error) { showAdmStatus('err','تعذر الرفض: ' + r.error.message); b.disabled = false; return; }
-        toastMsg('تم رفض المشاركة'); loadAdmin(admTab);
+      btn('رفض','mp-btn-danger', function(ev){
+        updatePostStatus(row, { status:'rejected', reviewed_at:new Date().toISOString(), reviewed_by:admUid }, 'تم رفض المشاركة', false, ev.currentTarget);
       });
     } else if (tab === 'rejected') {
-      btn('إعادة النشر','', async function(ev){
-        var b = ev.currentTarget; b.disabled = true;
-        var r = await sb.from('memorial_posts').update({ status:'approved', reviewed_at:new Date().toISOString(), reviewed_by:admUid }).eq('id', row.id);
-        if (r.error) { showAdmStatus('err','تعذر إعادة النشر: ' + r.error.message); b.disabled = false; return; }
-        toastMsg('تمت إعادة نشر المشاركة'); loadAdmin(admTab); renderPosts();
+      btn('إعادة النشر','', function(ev){
+        updatePostStatus(row, { status:'approved', reviewed_at:new Date().toISOString(), reviewed_by:admUid }, 'تمت إعادة نشر المشاركة', true, ev.currentTarget);
       });
-      btn('إعادتها للمراجعة','', async function(ev){
-        var b = ev.currentTarget; b.disabled = true;
-        var r = await sb.from('memorial_posts').update({ status:'pending', reviewed_at:null, reviewed_by:null }).eq('id', row.id);
-        if (r.error) { showAdmStatus('err','تعذر إعادة المشاركة للمراجعة: ' + r.error.message); b.disabled = false; return; }
-        toastMsg('عادت المشاركة إلى قائمة المراجعة'); loadAdmin(admTab);
+      btn('إعادتها للمراجعة','', function(ev){
+        updatePostStatus(row, { status:'pending', reviewed_at:null, reviewed_by:null }, 'عادت المشاركة إلى قائمة المراجعة', false, ev.currentTarget);
       });
     }
     btn('حذف المشاركة والصورة','mp-btn-danger', function(){ delPost(row); });
