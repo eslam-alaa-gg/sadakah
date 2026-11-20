@@ -615,12 +615,29 @@ badge.addEventListener("click",function(){toast(null!==state.count?"إجمالي
   $('mp-admin-close').addEventListener('click', function(){ admDlg.close(); });
   admDlg.addEventListener('click', function(ev){ if (ev.target === admDlg) admDlg.close(); });
 
+  function setAdminLoginPending(value){
+    try {
+      if (value) localStorage.setItem('mp_admin_login_pending', '1');
+      else localStorage.removeItem('mp_admin_login_pending');
+    } catch(e) {}
+  }
+  function isAdminLoginPending(){
+    try { return localStorage.getItem('mp_admin_login_pending') === '1'; }
+    catch(e) { return false; }
+  }
+
   $('mp-google').addEventListener('click', async function(){
     if (!sb) return;
     showAdmStatus(null, 'جارٍ فتح نافذة تسجيل الدخول…');
+    setAdminLoginPending(true);
     try {
-      await sb.auth.signInWithOAuth({ provider:'google', options:{ redirectTo: location.origin + location.pathname + '?admin=1' } });
-    } catch(e) { showAdmStatus('err', 'تعذر بدء تسجيل الدخول: ' + (e && e.message ? e.message : '')); }
+      var adminReturnUrl = new URL(location.pathname, location.origin);
+      adminReturnUrl.searchParams.set('admin', '1');
+      await sb.auth.signInWithOAuth({ provider:'google', options:{ redirectTo: adminReturnUrl.toString() } });
+    } catch(e) {
+      setAdminLoginPending(false);
+      showAdmStatus('err', 'تعذر بدء تسجيل الدخول: ' + (e && e.message ? e.message : ''));
+    }
   });
 
   $('mp-copy-uid').addEventListener('click', function(){
@@ -641,6 +658,7 @@ badge.addEventListener("click",function(){toast(null!==state.count?"إجمالي
         admSession = session && session.user ? session.user : null;
         admUid = admSession ? admSession.id : null;
         if (!admSession) {
+          setAdminLoginPending(false);
           showLogin();
           showAdmStatus(null, 'لم يتم العثور على جلسة دخول. سجّل الدخول بحساب Google المصرّح له.');
           return;
@@ -662,6 +680,7 @@ badge.addEventListener("click",function(){toast(null!==state.count?"إجمالي
           }
         }
 
+        setAdminLoginPending(false);
         if (isAdmin) {
           showPanel();
           showAdmStatus(null, 'تم التحقق من صلاحية المدير. يمكنك مراجعة المشاركات وإدارتها.');
@@ -670,6 +689,7 @@ badge.addEventListener("click",function(){toast(null!==state.count?"إجمالي
           showAdmStatus(null, 'الحساب مسجل الدخول لكنه غير موجود ضمن المديرين. معرّف الحساب: ' + admUid);
         }
       } catch(e) {
+        setAdminLoginPending(false);
         showLogin();
         showAdmStatus('err', 'تعذر التحقق من جلسة الدخول: ' + (e && e.message ? e.message : 'خطأ غير معروف.'));
       } finally {
@@ -682,9 +702,12 @@ badge.addEventListener("click",function(){toast(null!==state.count?"إجمالي
   if (sb && sb.auth && typeof sb.auth.onAuthStateChange === 'function') {
     sb.auth.onAuthStateChange(function(event, session){
       if (event !== 'SIGNED_IN' && event !== 'TOKEN_REFRESHED' && event !== 'INITIAL_SESSION') return;
-      if (new URLSearchParams(location.search).get('admin') !== '1' && !admDlg.open) return;
+      if (new URLSearchParams(location.search).get('admin') !== '1' && !admDlg.open && !isAdminLoginPending()) return;
       window.setTimeout(function(){
-        if (admDlg.open || new URLSearchParams(location.search).get('admin') === '1') resolveAdmin();
+        if (admDlg.open || new URLSearchParams(location.search).get('admin') === '1' || isAdminLoginPending()) {
+          if (!admDlg.open) openAdmin();
+          else resolveAdmin();
+        }
       }, 0);
     });
   }
@@ -802,7 +825,10 @@ badge.addEventListener("click",function(){toast(null!==state.count?"إجمالي
     }
   }
   /* ===== الوصول المخفي للوحة: #admin في الرابط فقط ===== */
-  function checkHash(){ if (new URLSearchParams(location.search).get('admin') === '1') { openAdmin(); } }
+  function checkHash(){
+    var requested = new URLSearchParams(location.search).get('admin') === '1';
+    if (requested || isAdminLoginPending()) openAdmin();
+  }
   window.addEventListener('hashchange', checkHash);
 
   /* ===== التهيئة ===== */
