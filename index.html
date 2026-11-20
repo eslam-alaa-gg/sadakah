@@ -643,15 +643,31 @@ badge.addEventListener("click",function(){toast(null!==state.count?"إجمالي
         showAdmStatus(null, 'لم يتم العثور على جلسة دخول. سجّل الدخول بحساب Google المصرّح له.');
         return;
       }
+      // تحقق أولًا من الدالة، ثم استخدم قراءة سجل المدير نفسه كمسار تحقق احتياطي.
+      // هذا يمنع بقاء لوحة التحكم مخفية إذا تعذر استدعاء RPC أو عاد بقيمة غير متوقعة.
       var r = await sb.rpc('is_admin');
       if (token !== admResolveToken) return;
-      if (r && r.error) {
-        showLogin();
-        showAdmStatus('err', 'تم تسجيل الدخول، لكن تعذر التحقق من صلاحية المدير: ' + (r.error.message || 'خطأ في الاتصال بقاعدة البيانات.'));
-        return;
+      var isAdmin = !!(r && (r.data === true || r.data === 'true'));
+      var verifyError = r && r.error ? r.error : null;
+
+      if (!isAdmin) {
+        var ownAdmin = await sb.from('admins').select('user_id').eq('user_id', admUid).maybeSingle();
+        if (token !== admResolveToken) return;
+        if (ownAdmin && ownAdmin.error) {
+          showLogin();
+          showAdmStatus('err', 'تم تسجيل الدخول، لكن تعذر قراءة صلاحيات المدير: ' + ownAdmin.error.message);
+          return;
+        }
+        isAdmin = !!(ownAdmin && ownAdmin.data && ownAdmin.data.user_id === admUid);
       }
-      if (r && r.data === true) { showPanel(); }
-      else { showBoot(); }
+
+      if (isAdmin) {
+        showPanel();
+        showAdmStatus(null, 'تم التحقق من صلاحية المدير. يمكنك مراجعة المشاركات وإدارتها.');
+      } else {
+        showBoot();
+        if (verifyError) showAdmStatus('err', 'تم تسجيل الدخول، لكن فحص صلاحية المدير لم يكتمل: ' + verifyError.message);
+      }
     } catch(e) {
       if (token !== admResolveToken) return;
       showLogin();
