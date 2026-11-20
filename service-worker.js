@@ -5,29 +5,27 @@
  * - باقي الملفات: من التخزين فورًا مع تحديثها في الخلفية (stale-while-revalidate).
  * عند تغيير أي ملف ثابت ارفع رقم الإصدار في CACHE_NAME.
  */
-const CACHE_NAME = 'al-jallad-pwa-v27';
-const CORE = ['./', './index.html', './manifest.webmanifest'];
-const OPTIONAL = [
-  './visitors-local.js',
-  './data/hadith.json',
-  './assets/audio/quran/metadata.json',
-  './assets/icons/icon-192.png',
-  './assets/icons/icon-512.png',
-  './assets/icons/icon-maskable-512.png'
-];
+const CACHE_NAME = 'al-jallad-pwa-v28';
+const CORE = ['./index.html'];
 
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
-    const cache = await caches.open(CACHE_NAME);
-    await cache.addAll(CORE);
-    // ملف اختياري مفقود لا يجب أن يُفشل تثبيت الـ Service Worker كله
-    await Promise.all(OPTIONAL.map(url => cache.add(url).catch(() => {})));
+    const response = await fetch(new Request(new URL('./index.html', self.location.href), {
+      cache: 'no-store',
+      credentials: 'same-origin'
+    }));
+    const type = (response.headers.get('content-type') || '').toLowerCase();
+    if (response.ok && type.includes('text/html')) {
+      const cache = await caches.open(CACHE_NAME);
+      await cache.put(new URL('./index.html', self.location.href), response);
+    }
     await self.skipWaiting();
   })());
 });
 
 self.addEventListener('activate', event => {
   event.waitUntil((async () => {
+    // Remove every previous cache created for this origin.
     const keys = await caches.keys();
     await Promise.all(keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key)));
     await self.clients.claim();
@@ -39,55 +37,34 @@ self.addEventListener('fetch', event => {
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
-  // واجهة الزوار والـ API: لا تُخزَّن أبدًا
+  // APIs and audio/range requests must always be handled directly.
   if (url.pathname.includes('/api/')) return;
-  // الصوت وطلبات Range: يتعامل معها المتصفح مباشرة (الاستجابات الجزئية 206 لا يمكن تخزينها)
   if (request.headers.has('range') || /\.(mp3|m4a|ogg|wav)$/i.test(url.pathname)) return;
 
   if (request.mode === 'navigate') {
     event.respondWith((async () => {
-      // Always fetch the real HTML entry point; never treat XML or another
-      // successful response as the cached homepage.
-      const indexUrl = new URL('./index.html', self.location.href).href;
-      const cache = await caches.open(CACHE_NAME);
-      let cached = await cache.match(indexUrl);
-
-      if (cached && !(cached.headers.get('content-type') || '').toLowerCase().includes('text/html')) {
-        await cache.delete(indexUrl);
-        cached = null;
-      }
-
+      const indexUrl = new URL('./index.html', self.location.href);
       try {
         const response = await fetch(new Request(indexUrl, {
-          method: 'GET',
-          credentials: 'same-origin',
-          cache: 'no-store'
+          cache: 'no-store',
+          credentials: 'same-origin'
         }));
-        const contentType = (response.headers.get('content-type') || '').toLowerCase();
-
-        if (response.ok && contentType.includes('text/html')) {
+        const type = (response.headers.get('content-type') || '').toLowerCase();
+        if (response.ok && type.includes('text/html')) {
+          const cache = await caches.open(CACHE_NAME);
           await cache.put(indexUrl, response.clone());
           return response;
         }
-
-        if (cached) return cached;
-        return Response.error();
-      } catch (err) {
-        if (cached) return cached;
-        return Response.error();
+        throw new Error('The server did not return an HTML page.');
+      } catch (error) {
+        const cache = await caches.open(CACHE_NAME);
+        const cached = await cache.match(indexUrl);
+        return cached || Response.error();
       }
     })());
     return;
   }
 
-  event.respondWith((async () => {
-    const cache = await caches.open(CACHE_NAME);
-    const cached = await cache.match(request);
-    const network = fetch(request).then(response => {
-      if (response && response.ok && response.status === 200) cache.put(request, response.clone());
-      return response;
-    });
-    if (cached) { network.catch(() => {}); return cached; }
-    return network;
-  })());
+  // Network only: do not serve stale JS, CSS, images, JSON, or manifests.
+  event.respondWith(fetch(new Request(request, { cache: 'no-store' })));
 });
